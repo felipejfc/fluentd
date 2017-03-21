@@ -26,6 +26,10 @@ module Fluent
       @influx_nsq = nil
       @log_topic = ENV['NSQ_LOG_TOPIC'] || "logs"
       @metric_topic = ENV['NSQ_METRIC_TOPIC'] || "metrics"
+      logs_to_nsq = ENV['SEND_LOGS_TO_NSQ'] || "true"
+      metrics_to_nsq = ENV['SEND_METRICS_TO_NSQ'] || "true"
+      @send_logs_to_nsq = if logs_to_nsq.downcase == 'false' then false else true end
+      @send_metrics_to_nsq = if metrics_to_nsq == 'false' then false else true end
     end
 
     def start
@@ -43,7 +47,7 @@ module Fluent
         if from_controller?(record) || deis_deployed_app?(record)
           @logger_nsq ||= get_nsq_producer(@log_topic)
           record["time"] = Time.now().strftime("%FT%T.%6N%:z")
-          push(@logger_nsq, record) if @logger_nsq
+          push(@logger_nsq, record) if @send_logs_to_nsq && @logger_nsq
         end
 
         if from_router?(record)
@@ -54,7 +58,7 @@ module Fluent
               line = data.map do |point|
                 InfluxDB::PointValue.new(point).dump
               end.join("\n".freeze)
-              push(@influx_nsq, line) if @influx_nsq
+              push(@influx_nsq, line) if @send_metrics_to_nsq && @influx_nsq
             end
           rescue Exception => e
             puts "Error:#{e.backtrace}"
